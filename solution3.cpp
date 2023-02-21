@@ -1,58 +1,69 @@
 #include <iostream>
 #include <thread>
 #include <mutex>
+#include <future>
 
 using namespace std;
-
-std::condition_variable cv;
-bool flag = false;
+int buffer = 0;
 std::mutex m;
+std::condition_variable cv;
 
-template<typename T>
+template <typename T>
 class my_future{
     public:
-        T val;
-        my_future(T x):val(x){};
-        T get() {
+        // my_future () : {};
+        T get () {
+            std::unique_lock<mutex>locker (m);
+            cv.wait(locker, [](){return buffer > 0;});
+            T val = buffer;
+            cout<<"Cosumed val "<<val<<endl;
+            locker.unlock();
             return val;
         }
 };
 
-template<typename T>
+template <typename T>
 class my_promise{
     public:
-        T val;
-        auto get_future() {
-            std::unique_lock<mutex>locker (m);
-            cv.wait(locker, [](){return flag;});
-            my_future<T> fut(val);
-            flag = false;
-            locker.unlock();
-            cv.notify_one();
-            return fut;
-        }
-
+        shared_ptr<my_future<T>> f;
+        // my_promise () : f(){f = make_ptr<my_future>(); };
         void set_value(T x){
             std::unique_lock<mutex>locker (m);
-            cv.wait(locker, [](){return !flag;});
-            val = x;
-            flag = true;
+            cv.wait(locker, [](){return buffer < 100;});
+            buffer = x;
+            cout<<"Pushed value "<<x<<" into buffer\n";
             locker.unlock();
             cv.notify_one();
+        }
+
+        auto get_future(){
+            return *f;
+        }
+
+        void set_exception(exception_ptr ex){
+            rethrow_exception(ex);
         }
 };
 
-void task(my_promise<int> buffPromise, const char* threadNum, int loopFor){
-    lock_guard<mutex> lock(m);
-    buffPromise.set_value(3);
-    // m.unlock();
+void task(my_promise<int> buffPromise){
+    try
+    {
+        buffPromise.set_value(1);
+    } 
+    catch (std::exception&)
+    {
+        buffPromise.set_exception(std::current_exception());
+    }
+    
 }
 
 int main(){
-    my_promise<int> buffPromise;
-    my_future<int> buffFuture = buffPromise.get_future();
-    std::thread t1(task, move(buffPromise), "T1", 5);
-    cout<<"Future value is"<<buffFuture.get()<<endl;
-    t1.join();
+    // std::thread t1(create_promise);
+    my_promise<int> p;
+    my_future<int> f = (p.get_future());
+    cout << "Promise created \n";
+    std::thread tp(task, move(p));
+    tp.join();
+    cout<<f.get()<<endl;
     return 0;
 }
