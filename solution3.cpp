@@ -11,14 +11,18 @@ std::condition_variable cv;
 template <typename T>
 class my_future{
     public:
-        // my_future () : {};
         T get () {
-            std::unique_lock<mutex>locker (m);
-            cv.wait(locker, [](){return buffer > 0;});
-            T val = buffer;
-            cout<<"Cosumed val "<<val<<endl;
-            locker.unlock();
-            return val;
+            try {
+                std::unique_lock<mutex>locker (m);
+                cv.wait(locker, [](){return buffer > 0;});
+                T val = buffer;
+                cout<<"Cosumed val "<<val<<endl;
+                locker.unlock();
+                return val;
+            } catch (exception_ptr ex)
+            {
+                rethrow_exception(ex);
+            }
         }
 };
 
@@ -26,7 +30,7 @@ template <typename T>
 class my_promise{
     public:
         shared_ptr<my_future<T>> f;
-        // my_promise () : f(){f = make_ptr<my_future>(); };
+        exception_ptr ex;
         void set_value(T x){
             std::unique_lock<mutex>locker (m);
             cv.wait(locker, [](){return buffer < 100;});
@@ -41,7 +45,7 @@ class my_promise{
         }
 
         void set_exception(exception_ptr ex){
-            rethrow_exception(ex);
+            ex = std::current_exception();
         }
 };
 
