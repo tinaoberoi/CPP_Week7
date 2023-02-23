@@ -28,4 +28,7 @@ int main(){
 
     // The whole point of async is that the main thread can continue moving,
     // And the value of the parameter can be received later in the future.
+    // If we call detatch the main thread can continue moving otherwise the join 
+    // would have waited for the response and main thread could not have moved
+    // ahead.
 }
